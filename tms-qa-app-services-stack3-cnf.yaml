@@ -1,0 +1,779 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Application Stack - ECS Task Definitions and Services with AWS Best Practices
+
+Parameters:
+  EnvironmentTag:
+    Type: String
+    Default: qa
+    Description: Environment name
+  ImageTag:
+    Type: String
+    Default: "latest"
+    Description: Docker image tag for deployment (use semantic versioning)
+  FrontendPrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Manually created Frontend Private Subnet IDs
+    Default: subnet-089ae8c862b6dbe13,subnet-0b5bdcda2d95513b7
+  BackendPrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Manually created Backend Private Subnet IDs
+    Default: subnet-0a2f6c5f35a48f45c,subnet-0c32c64e5765f40da
+  
+  # Resource Configuration Parameters
+  TaskCpu:
+    Type: Number
+    Default: 512
+    Description: CPU units for ECS tasks
+  TaskMemory:
+    Type: Number
+    Default: 1024
+    Description: Memory (MB) for ECS tasks
+  ContainerCpu:
+    Type: Number
+    Default: 256
+    Description: CPU units for containers
+  ContainerMemory:
+    Type: Number
+    Default: 512
+    Description: Memory (MB) for containers
+  LogRetentionDays:
+    Type: Number
+    Default: 7
+    Description: CloudWatch log retention in days
+  
+  # Tag Parameters
+  Environment:
+    Type: String
+    Default: QA
+    Description: Environment tag value
+  Application:
+    Type: String
+    Default: TMS-QA
+    Description: Application tag value
+  ApplicationOwner:
+    Type: String
+    Default: "Charles Link"
+    Description: Application owner tag value
+  
+  # Auto Scaling Parameters
+  MinCapacity:
+    Type: Number
+    Default: 1
+    Description: Minimum number of tasks
+  MaxCapacity:
+    Type: Number
+    Default: 10
+    Description: Maximum number of tasks
+  DesiredCapacity:
+    Type: Number
+    Default: 1
+    Description: Desired number of tasks
+  TargetCpuUtilization:
+    Type: Number
+    Default: 70
+    Description: Target CPU utilization percentage
+  TargetMemoryUtilization:
+    Type: Number
+    Default: 80
+    Description: Target memory utilization percentage
+
+Mappings:
+  ServicePorts:
+    frontend:
+      port: 80
+    drivers:
+      port: 8001
+    vehicles:
+      port: 8002
+    alertconfigs:
+      port: 8003
+    trips:
+      port: 8004
+    facilities:
+      port: 8005
+    carrierprofile:
+      port: 8006
+
+
+
+Resources:
+  # Task Definitions
+  FrontendTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${EnvironmentTag}-frontend-task"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      ExecutionRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskExecutionRoleArn"
+      TaskRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskRoleArn"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      ContainerDefinitions:
+        - Name: frontend-container
+          Image: !Sub 
+            - "${ECRUri}:${ImageTag}"
+            - ECRUri: !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-FrontendECRUri"
+              ImageTag: !Ref ImageTag
+          Essential: true
+          Cpu: !Ref ContainerCpu
+          Memory: !Ref ContainerMemory
+          MemoryReservation: !Ref ContainerMemory
+          StopTimeout: 120
+          PortMappings:
+            - ContainerPort: !FindInMap [ServicePorts, frontend, port]
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref FrontendLogGroup
+              awslogs-region: us-east-1
+              awslogs-stream-prefix: frontend
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - "curl -f http://localhost:80/docs || exit 1"
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 120
+          Environment:
+            - Name: NODE_ENV
+              Value: !Ref EnvironmentTag
+            - Name: PORT
+              Value: !FindInMap [ServicePorts, frontend, port]
+
+  DriversTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${EnvironmentTag}-drivers-task"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      ExecutionRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskExecutionRoleArn"
+      TaskRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskRoleArn"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      ContainerDefinitions:
+        - Name: drivers-container
+          Image: !Sub 
+            - "${ECRUri}:${ImageTag}"
+            - ECRUri: !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-driversECRUri"
+              ImageTag: !Ref ImageTag
+          Essential: true
+          Cpu: !Ref ContainerCpu
+          Memory: !Ref ContainerMemory
+          MemoryReservation: !Ref ContainerMemory
+          StopTimeout: 120
+          PortMappings:
+            - ContainerPort: !FindInMap [ServicePorts, drivers, port]
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref DriversLogGroup
+              awslogs-region: us-east-1
+              awslogs-stream-prefix: drivers
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - "curl -f http://localhost:8001/docs || exit 1"
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 120
+          Environment:
+            - Name: NODE_ENV
+              Value: !Ref EnvironmentTag
+            - Name: PORT
+              Value: !FindInMap [ServicePorts, drivers, port]
+
+  VehiclesTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${EnvironmentTag}-vehicles-task"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      ExecutionRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskExecutionRoleArn"
+      TaskRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskRoleArn"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      ContainerDefinitions:
+        - Name: vehicles-container
+          Image: !Sub 
+            - "${ECRUri}:${ImageTag}"
+            - ECRUri: !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-vehiclesECRUri"
+              ImageTag: !Ref ImageTag
+          Essential: true
+          Cpu: !Ref ContainerCpu
+          Memory: !Ref ContainerMemory
+          MemoryReservation: !Ref ContainerMemory
+          StopTimeout: 120
+          PortMappings:
+            - ContainerPort: !FindInMap [ServicePorts, vehicles, port]
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref VehiclesLogGroup
+              awslogs-region: us-east-1
+              awslogs-stream-prefix: vehicles
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - "curl -f http://localhost:8002/docs || exit 1"
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 120
+          Environment:
+            - Name: NODE_ENV
+              Value: !Ref EnvironmentTag
+            - Name: PORT
+              Value: !FindInMap [ServicePorts, vehicles, port]
+
+  TripsTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${EnvironmentTag}-trips-task"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      ExecutionRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskExecutionRoleArn"
+      TaskRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskRoleArn"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      ContainerDefinitions:
+        - Name: trips-container
+          Image: !Sub 
+            - "${ECRUri}:${ImageTag}"
+            - ECRUri: !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-tripsECRUri"
+              ImageTag: !Ref ImageTag
+          Essential: true
+          Cpu: !Ref ContainerCpu
+          Memory: !Ref ContainerMemory
+          MemoryReservation: !Ref ContainerMemory
+          StopTimeout: 120
+          PortMappings:
+            - ContainerPort: !FindInMap [ServicePorts, trips, port]
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref TripsLogGroup
+              awslogs-region: us-east-1
+              awslogs-stream-prefix: trips
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - "curl -f http://localhost:8004/docs || exit 1"
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 120
+          Environment:
+            - Name: NODE_ENV
+              Value: !Ref EnvironmentTag
+            - Name: PORT
+              Value: !FindInMap [ServicePorts, trips, port]
+
+  AlertConfigsTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${EnvironmentTag}-alertconfigs-task"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      ExecutionRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskExecutionRoleArn"
+      TaskRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskRoleArn"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      ContainerDefinitions:
+        - Name: alertconfigs-container
+          Image: !Sub 
+            - "${ECRUri}:${ImageTag}"
+            - ECRUri: !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-alertconfigsECRUri"
+              ImageTag: !Ref ImageTag
+          Essential: true
+          Cpu: !Ref ContainerCpu
+          Memory: !Ref ContainerMemory
+          MemoryReservation: !Ref ContainerMemory
+          StopTimeout: 120
+          PortMappings:
+            - ContainerPort: !FindInMap [ServicePorts, alertconfigs, port]
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref AlertConfigsLogGroup
+              awslogs-region: us-east-1
+              awslogs-stream-prefix: alertconfigs
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - "curl -f http://localhost:8003/docs || exit 1"
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 120
+          Environment:
+            - Name: NODE_ENV
+              Value: !Ref EnvironmentTag
+            - Name: PORT
+              Value: !FindInMap [ServicePorts, alertconfigs, port]
+
+  CarrierProfileTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${EnvironmentTag}-carrierprofile-task"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      ExecutionRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskExecutionRoleArn"
+      TaskRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskRoleArn"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      ContainerDefinitions:
+        - Name: carrierprofile-container
+          Image: !Sub 
+            - "${ECRUri}:${ImageTag}"
+            - ECRUri: !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-carrierProfileECRUri"
+              ImageTag: !Ref ImageTag
+          Essential: true
+          Cpu: !Ref ContainerCpu
+          Memory: !Ref ContainerMemory
+          MemoryReservation: !Ref ContainerMemory
+          StopTimeout: 120
+          PortMappings:
+            - ContainerPort: !FindInMap [ServicePorts, carrierprofile, port]
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CarrierProfileLogGroup
+              awslogs-region: us-east-1
+              awslogs-stream-prefix: carrierprofile
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - "curl -f http://localhost:8006/docs || exit 1"
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 120
+          Environment:
+            - Name: NODE_ENV
+              Value: !Ref EnvironmentTag
+            - Name: PORT
+              Value: !FindInMap [ServicePorts, carrierprofile, port]
+
+  FacilitiesTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${EnvironmentTag}-facilities-task"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      ExecutionRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskExecutionRoleArn"
+      TaskRoleArn: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-TaskRoleArn"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      ContainerDefinitions:
+        - Name: facilities-container
+          Image: !Sub 
+            - "${ECRUri}:${ImageTag}"
+            - ECRUri: !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-facilitiesECRUri"
+              ImageTag: !Ref ImageTag
+          Essential: true
+          Cpu: !Ref ContainerCpu
+          Memory: !Ref ContainerMemory
+          MemoryReservation: !Ref ContainerMemory
+          StopTimeout: 120
+          PortMappings:
+            - ContainerPort: !FindInMap [ServicePorts, facilities, port]
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref FacilitiesLogGroup
+              awslogs-region: us-east-1
+              awslogs-stream-prefix: facilities
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - "curl -f http://localhost:8005/docs || exit 1"
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 120
+          Environment:
+            - Name: NODE_ENV
+              Value: !Ref EnvironmentTag
+            - Name: PORT
+              Value: !FindInMap [ServicePorts, facilities, port]
+
+  FrontendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${EnvironmentTag}-frontend"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+
+  DriversLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${EnvironmentTag}-drivers"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+
+  VehiclesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${EnvironmentTag}-vehicles"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+
+  TripsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${EnvironmentTag}-trips"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+
+  AlertConfigsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${EnvironmentTag}-alertconfigs"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+
+  CarrierProfileLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${EnvironmentTag}-carrierprofile"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+
+  FacilitiesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${EnvironmentTag}-facilities"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+
+  # ECS Services
+  FrontendService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "${EnvironmentTag}-frontend-service"
+      Cluster: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-ClusterArn"
+      TaskDefinition: !Ref FrontendTaskDefinition
+      DesiredCount: !Ref DesiredCapacity
+      LaunchType: FARGATE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+            - !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-FargateSecurityGroupId"
+          Subnets: !Ref FrontendPrivateSubnetIds
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: frontend-container
+          ContainerPort: !FindInMap [ServicePorts, frontend, port]
+          TargetGroupArn: !ImportValue 
+            Fn::Sub: "${EnvironmentTag}-FrontendTargetGroupArn"
+
+  DriversService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "${EnvironmentTag}-drivers-service"
+      Cluster: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-ClusterArn"
+      TaskDefinition: !Ref DriversTaskDefinition
+      DesiredCount: !Ref DesiredCapacity
+      LaunchType: FARGATE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+            - !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-FargateSecurityGroupId"
+          Subnets: !Ref BackendPrivateSubnetIds
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: drivers-container
+          ContainerPort: !FindInMap [ServicePorts, drivers, port]
+          TargetGroupArn: !ImportValue 
+            Fn::Sub: "${EnvironmentTag}-driversTargetGroupArn"
+
+  VehiclesService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "${EnvironmentTag}-vehicles-service"
+      Cluster: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-ClusterArn"
+      TaskDefinition: !Ref VehiclesTaskDefinition
+      DesiredCount: !Ref DesiredCapacity
+      LaunchType: FARGATE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+            - !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-FargateSecurityGroupId"
+          Subnets: !Ref BackendPrivateSubnetIds
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: vehicles-container
+          ContainerPort: !FindInMap [ServicePorts, vehicles, port]
+          TargetGroupArn: !ImportValue 
+            Fn::Sub: "${EnvironmentTag}-vehiclesTargetGroupArn"
+
+  TripsService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "${EnvironmentTag}-trips-service"
+      Cluster: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-ClusterArn"
+      TaskDefinition: !Ref TripsTaskDefinition
+      DesiredCount: !Ref DesiredCapacity
+      LaunchType: FARGATE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+            - !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-FargateSecurityGroupId"
+          Subnets: !Ref BackendPrivateSubnetIds
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: trips-container
+          ContainerPort: !FindInMap [ServicePorts, trips, port]
+          TargetGroupArn: !ImportValue 
+            Fn::Sub: "${EnvironmentTag}-tripsTargetGroupArn"
+
+  AlertConfigsService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "${EnvironmentTag}-alertconfigs-service"
+      Cluster: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-ClusterArn"
+      TaskDefinition: !Ref AlertConfigsTaskDefinition
+      DesiredCount: !Ref DesiredCapacity
+      LaunchType: FARGATE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+            - !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-FargateSecurityGroupId"
+          Subnets: !Ref BackendPrivateSubnetIds
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: alertconfigs-container
+          ContainerPort: !FindInMap [ServicePorts, alertconfigs, port]
+          TargetGroupArn: !ImportValue 
+            Fn::Sub: "${EnvironmentTag}-alertconfigsTargetGroupArn"
+
+  CarrierProfileService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "${EnvironmentTag}-carrierprofile-service"
+      Cluster: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-ClusterArn"
+      TaskDefinition: !Ref CarrierProfileTaskDefinition
+      DesiredCount: !Ref DesiredCapacity
+      LaunchType: FARGATE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+            - !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-FargateSecurityGroupId"
+          Subnets: !Ref BackendPrivateSubnetIds
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: carrierprofile-container
+          ContainerPort: !FindInMap [ServicePorts, carrierprofile, port]
+          TargetGroupArn: !ImportValue 
+            Fn::Sub: "${EnvironmentTag}-carrierProfileTargetGroupArn"
+
+  FacilitiesService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "${EnvironmentTag}-facilities-service"
+      Cluster: !ImportValue 
+        Fn::Sub: "${EnvironmentTag}-ClusterArn"
+      TaskDefinition: !Ref FacilitiesTaskDefinition
+      DesiredCount: !Ref DesiredCapacity
+      LaunchType: FARGATE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+            - !ImportValue 
+                Fn::Sub: "${EnvironmentTag}-FargateSecurityGroupId"
+          Subnets: !Ref BackendPrivateSubnetIds
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: facilities-container
+          ContainerPort: !FindInMap [ServicePorts, facilities, port]
+          TargetGroupArn: !ImportValue 
+            Fn::Sub: "${EnvironmentTag}-facilitiesTargetGroupArn"
