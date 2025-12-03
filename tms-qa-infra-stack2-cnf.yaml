@@ -14,13 +14,13 @@ Parameters:
     Type: List<AWS::EC2::Subnet::Id>
     Description: Manually created Backend Private Subnet IDs 
     Default: "subnet-0a2f6c5f35a48f45c,subnet-0c32c64e5765f40da"
-  TEnvironmentag:
+  EnvironmentTag:
     Type: String
     Default: qa
     Description: Environment name
   SSLCertificateArn:
     Type: String
-    Description: SSL Certificate ARN from AWS Certificate Manager (imported 3rd party cert)
+    Description: SSL Certificate ARN from AWS Certificate Manager 
   ApplicationProxyCIDR:
     Type: String
     Description: CIDR block for Application Proxy connector
@@ -29,6 +29,11 @@ Parameters:
     Type: String
     Description: CIDR block for internal Reworld Network
     Default: "192.168.0.0/16"
+  WorkspaceCIDR:
+    Type: String
+    Description: CIDR block for workspace access
+    Default: "172.28.88.0/21"
+  
   
   # Application Configuration
   Application:
@@ -59,7 +64,7 @@ Parameters:
     Type: String
     Default: internal
     AllowedValues: [internal, internet-facing]
-    Description: ALB scheme (internal or internet-facing)
+    Description: ALB scheme 
   IdleTimeoutSeconds:
     Type: Number
     Default: 60
@@ -182,6 +187,17 @@ Resources:
           ToPort: 443
           CidrIp: !Ref ReworldNetworkCIDR
           Description: HTTPS from Reworld Network
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref WorkspaceCIDR
+          Description: HTTP from Workspace
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref WorkspaceCIDR
+          Description: HTTP from Workspace
+        
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -201,6 +217,41 @@ Resources:
           ToPort: 80
           SourceSecurityGroupId: !Ref FrontendALBSecurityGroup
           Description: HTTP from Frontend ALB only
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref FrontendALBSecurityGroup
+          Description: HTTPS from Frontend ALB only
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref ApplicationProxyCIDR
+          Description: HTTP from Application Proxy
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref ApplicationProxyCIDR
+          Description: HTTPS from Application Proxy
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref ReworldNetworkCIDR
+          Description: HTTP from Reworld Network
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref ReworldNetworkCIDR
+          Description: HTTPS from Reworld Network
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref WorkspaceCIDR
+          Description: HTTP from Workspace
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref WorkspaceCIDR
+          Description: HTTPS from Workspace     
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -502,7 +553,7 @@ Resources:
           Value: !Sub "${Application}-${Environment}"
         - Key: "Application Owner"
           Value: !Ref ApplicationOwner
-
+          
   FrontendHTTPListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
@@ -532,20 +583,35 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: 443
+            StatusCode: HTTP_301
+      LoadBalancerArn: !Ref BackendALB
+      Port: 80
+      Protocol: HTTP
+
+  BackendHTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
         - Type: fixed-response
           FixedResponseConfig:
             StatusCode: 404 
             ContentType: application/json
             MessageBody: '{"response":"Specify the endpoints"}'
       LoadBalancerArn: !Ref BackendALB
-      Port: 80
-      Protocol: HTTP
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref SSLCertificateArn
 
-  DriverRule:
+  DriverHTTPSRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
-      ListenerArn: !Ref BackendListener 
-      Priority: 100
+      ListenerArn: !Ref BackendHTTPSListener 
+      Priority: 110
       Conditions:
         - Field: path-pattern
           Values:
@@ -554,11 +620,11 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref driversTargetGroup
 
-  vehicleRule:
+  vehicleHTTPSRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
-      ListenerArn: !Ref BackendListener
-      Priority: 200 
+      ListenerArn: !Ref BackendHTTPSListener
+      Priority: 210 
       Conditions:
         - Field: path-pattern
           Values:
@@ -567,11 +633,11 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref vehiclesTargetGroup
 
-  TripsRule:
+  TripsHTTPSRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
-      ListenerArn: !Ref BackendListener
-      Priority: 300 
+      ListenerArn: !Ref BackendHTTPSListener
+      Priority: 310 
       Conditions:
         - Field: path-pattern
           Values:
@@ -580,11 +646,11 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref tripsTargetGroup
 
-  alertconfigsRule:
+  alertconfigsHTTPSRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
-      ListenerArn: !Ref BackendListener
-      Priority: 400 
+      ListenerArn: !Ref BackendHTTPSListener
+      Priority: 410 
       Conditions:
         - Field: path-pattern
           Values:
@@ -593,11 +659,11 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref alertconfigsTargetGroup
 
-  carrierProfileRule:
+  carrierProfileHTTPSRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
-      ListenerArn: !Ref BackendListener
-      Priority: 500 
+      ListenerArn: !Ref BackendHTTPSListener
+      Priority: 510 
       Conditions:
         - Field: path-pattern
           Values:
@@ -606,11 +672,11 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref carrierProfileTargetGroup
 
-  facilitiesRule:
+  facilitiesHTTPSRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
-      ListenerArn: !Ref BackendListener
-      Priority: 600 
+      ListenerArn: !Ref BackendHTTPSListener
+      Priority: 610 
       Conditions:
         - Field: path-pattern
           Values:
@@ -649,6 +715,28 @@ Outputs:
     Value: !Ref BackendListener
     Export:
       Name: !Sub "${EnvironmentTag}-BackendListenerArn"
+
+  BackendHTTPSListenerArn:
+    Value: !Ref BackendHTTPSListener
+    Export:
+      Name: !Sub "${EnvironmentTag}-BackendHTTPSListenerArn"
+
+  BackendALBDNSName:
+    Value: !GetAtt BackendALB.DNSName
+    Export:
+      Name: !Sub "${EnvironmentTag}-BackendALBDNSName"
+    Description: Backend ALB DNS name for domain configuration
+
+  FrontendHTTPSListenerArn:
+    Value: !Ref FrontendHTTPSListener
+    Export:
+      Name: !Sub "${EnvironmentTag}-FrontendHTTPSListenerArn"
+
+  FrontendALBDNSName:
+    Value: !GetAtt FrontendALB.DNSName
+    Export:
+      Name: !Sub "${EnvironmentTag}-FrontendALBDNSName"
+    Description: Frontend ALB DNS name for domain configuration
 
   FrontendTargetGroupArn:
     Value: !Ref FrontendTargetGroup
