@@ -6,10 +6,18 @@ Parameters:
     Type: String
     Default: qa
     Description: Environment name
+  RegionName:
+    Type: String
+    Default: us-east-1
+    Description: AWS Region for resources (e.g., us-east-1, us-west-2)
+  ClusterName:
+    Type: String
+    Default: TMS-qa-app-cluster
+    Description: ECS Cluster name
   ImageTag:
     Type: String
-    Default: "latest"
-    Description: Docker image tag for deployment (use semantic versioning)
+    Default: "1.0.0"
+    Description: Docker image tag for deployment (use semantic versioning, e.g., 1.0.0)
   FrontendPrivateSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
     Description: Manually created Frontend Private Subnet IDs
@@ -93,6 +101,8 @@ Mappings:
       port: 8005
     carrierprofile:
       port: 8006
+    usermgt:
+      port: 8007
 
 
 
@@ -137,7 +147,7 @@ Resources:
             LogDriver: awslogs
             Options:
               awslogs-group: !Ref FrontendLogGroup
-              awslogs-region: us-east-1
+              awslogs-region: !Ref RegionName
               awslogs-stream-prefix: frontend
           HealthCheck:
             Command:
@@ -147,6 +157,8 @@ Resources:
             Timeout: 5
             Retries: 3
             StartPeriod: 120
+          LinuxParameters:
+            InitProcessEnabled: true
           Environment:
             - Name: NODE_ENV
               Value: !Ref EnvironmentTag
@@ -192,7 +204,7 @@ Resources:
             LogDriver: awslogs
             Options:
               awslogs-group: !Ref DriversLogGroup
-              awslogs-region: us-east-1
+              awslogs-region: !Ref RegionName
               awslogs-stream-prefix: drivers
           HealthCheck:
             Command:
@@ -202,11 +214,20 @@ Resources:
             Timeout: 5
             Retries: 3
             StartPeriod: 120
+          LinuxParameters:
+            InitProcessEnabled: true
           Environment:
             - Name: NODE_ENV
               Value: !Ref EnvironmentTag
-            - Name: PORT
-              Value: !FindInMap [ServicePorts, drivers, port]
+            - Name: REDIRECT_URI
+              Value: https://remove-uat-api.reworldwaste.com/users/
+            - Name: FRONTEND_URI
+              Value: https://remove-uat.reworldwaste.com/load-board
+          Secrets:
+            - Name: TMS_SECRETS
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:tms-qa-LDiZ53
+            - Name: TMS_TABLES
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:TMS_TABLES-I7obHA
 
   VehiclesTaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -247,7 +268,7 @@ Resources:
             LogDriver: awslogs
             Options:
               awslogs-group: !Ref VehiclesLogGroup
-              awslogs-region: us-east-1
+              awslogs-region: !Ref RegionName
               awslogs-stream-prefix: vehicles
           HealthCheck:
             Command:
@@ -257,11 +278,20 @@ Resources:
             Timeout: 5
             Retries: 3
             StartPeriod: 120
+          LinuxParameters:
+            InitProcessEnabled: true
           Environment:
             - Name: NODE_ENV
               Value: !Ref EnvironmentTag
-            - Name: PORT
-              Value: !FindInMap [ServicePorts, vehicles, port]
+            - Name: REDIRECT_URI
+              Value: https://remove-uat-api.reworldwaste.com/users/
+            - Name: FRONTEND_URI
+              Value: https://remove-uat.reworldwaste.com/load-board
+          Secrets:
+            - Name: TMS_SECRETS
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:tms-qa-LDiZ53
+            - Name: TMS_TABLES
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:TMS_TABLES-I7obHA
 
   TripsTaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -302,7 +332,7 @@ Resources:
             LogDriver: awslogs
             Options:
               awslogs-group: !Ref TripsLogGroup
-              awslogs-region: us-east-1
+              awslogs-region: !Ref RegionName
               awslogs-stream-prefix: trips
           HealthCheck:
             Command:
@@ -312,11 +342,20 @@ Resources:
             Timeout: 5
             Retries: 3
             StartPeriod: 120
+          LinuxParameters:
+            InitProcessEnabled: true
           Environment:
             - Name: NODE_ENV
               Value: !Ref EnvironmentTag
-            - Name: PORT
-              Value: !FindInMap [ServicePorts, trips, port]
+            - Name: REDIRECT_URI
+              Value: https://remove-uat-api.reworldwaste.com/users/
+            - Name: FRONTEND_URI
+              Value: https://remove-uat.reworldwaste.com/load-board
+          Secrets:
+            - Name: TMS_SECRETS
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:tms-qa-LDiZ53
+            - Name: TMS_TABLES
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:TMS_TABLES-I7obHA
 
   AlertConfigsTaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -357,7 +396,7 @@ Resources:
             LogDriver: awslogs
             Options:
               awslogs-group: !Ref AlertConfigsLogGroup
-              awslogs-region: us-east-1
+              awslogs-region: !Ref RegionName
               awslogs-stream-prefix: alertconfigs
           HealthCheck:
             Command:
@@ -367,11 +406,20 @@ Resources:
             Timeout: 5
             Retries: 3
             StartPeriod: 120
+          LinuxParameters:
+            InitProcessEnabled: true
           Environment:
             - Name: NODE_ENV
               Value: !Ref EnvironmentTag
-            - Name: PORT
-              Value: !FindInMap [ServicePorts, alertconfigs, port]
+            - Name: REDIRECT_URI
+              Value: https://remove-uat-api.reworldwaste.com/users/
+            - Name: FRONTEND_URI
+              Value: https://remove-uat.reworldwaste.com/load-board
+          Secrets:
+            - Name: TMS_SECRETS
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:tms-qa-LDiZ53
+            - Name: TMS_TABLES
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:TMS_TABLES-I7obHA
 
   CarrierProfileTaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -412,7 +460,7 @@ Resources:
             LogDriver: awslogs
             Options:
               awslogs-group: !Ref CarrierProfileLogGroup
-              awslogs-region: us-east-1
+              awslogs-region: !Ref RegionName
               awslogs-stream-prefix: carrierprofile
           HealthCheck:
             Command:
@@ -422,11 +470,20 @@ Resources:
             Timeout: 5
             Retries: 3
             StartPeriod: 120
+          LinuxParameters:
+            InitProcessEnabled: true
           Environment:
             - Name: NODE_ENV
               Value: !Ref EnvironmentTag
-            - Name: PORT
-              Value: !FindInMap [ServicePorts, carrierprofile, port]
+            - Name: REDIRECT_URI
+              Value: https://remove-uat-api.reworldwaste.com/users/
+            - Name: FRONTEND_URI
+              Value: https://remove-uat.reworldwaste.com/load-board
+          Secrets:
+            - Name: TMS_SECRETS
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:tms-qa-LDiZ53
+            - Name: TMS_TABLES
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:TMS_TABLES-I7obHA
 
   FacilitiesTaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -467,7 +524,7 @@ Resources:
             LogDriver: awslogs
             Options:
               awslogs-group: !Ref FacilitiesLogGroup
-              awslogs-region: us-east-1
+              awslogs-region: !Ref RegionName
               awslogs-stream-prefix: facilities
           HealthCheck:
             Command:
@@ -477,12 +534,86 @@ Resources:
             Timeout: 5
             Retries: 3
             StartPeriod: 120
+          LinuxParameters:
+            InitProcessEnabled: true
           Environment:
             - Name: NODE_ENV
               Value: !Ref EnvironmentTag
-            - Name: PORT
-              Value: !FindInMap [ServicePorts, facilities, port]
+            - Name: REDIRECT_URI
+              Value: https://remove-uat-api.reworldwaste.com/users/
+            - Name: FRONTEND_URI
+              Value: "https://remove-uat.reworldwaste.com/load-board"
+          Secrets:
+            - Name: TMS_SECRETS
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:tms-qa-LDiZ53
+            - Name: TMS_TABLES
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:TMS_TABLES-I7obHA
 
+  UserMgtTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${EnvironmentTag}-usermgt-task"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      ExecutionRoleArn: !ImportValue
+        Fn::Sub: "${EnvironmentTag}-TaskExecutionRoleArn"
+      TaskRoleArn: !ImportValue
+        Fn::Sub: "${EnvironmentTag}-TaskRoleArn"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      ContainerDefinitions:
+        - Name: usermgt-container
+          Image: !Sub
+            - "${ECRUri}:${ImageTag}"
+            - ECRUri: !ImportValue
+                Fn::Sub: "${EnvironmentTag}-userMgtECRUri"
+              ImageTag: !Ref ImageTag
+          Essential: true
+          Cpu: !Ref ContainerCpu
+          Memory: !Ref ContainerMemory
+          MemoryReservation: !Ref ContainerMemory
+          StopTimeout: 120
+          PortMappings:
+            - ContainerPort: !FindInMap [ServicePorts, usermgt, port]
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref UserMgtLogGroup
+              awslogs-region: !Ref RegionName
+              awslogs-stream-prefix: usermgt
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - "curl -f http://localhost:8007/docs || exit 1"
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 120
+          LinuxParameters:
+            InitProcessEnabled: true
+          Environment:
+            - Name: NODE_ENV
+              Value: !Ref EnvironmentTag
+            - Name: env
+              Value: uat
+            - Name: REDIRECT_URI
+              Value: https://remove-uat-api.reworldwaste.com/users/
+            - Name: FRONTEND_URI
+              Value: https://remove-uat.reworldwaste.com/load-board
+          Secrets:
+            - Name: TMS_SECRETS
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:tms-qa-LDiZ53
+            - Name: TMS_TABLES
+              ValueFrom: arn:aws:secretsmanager:us-east-1:846376693876:secret:TMS_TABLES-I7obHA
   FrontendLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -574,6 +705,19 @@ Resources:
         - Key: "Application Owner"
           Value: !Ref ApplicationOwner
 
+  UserMgtLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${EnvironmentTag}-usermgt"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+
   # ECS Services
   FrontendService:
     Type: AWS::ECS::Service
@@ -584,6 +728,14 @@ Resources:
       TaskDefinition: !Ref FrontendTaskDefinition
       DesiredCount: !Ref DesiredCapacity
       LaunchType: FARGATE
+      EnableExecuteCommand: true
+      EnableECSManagedTags: true
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -613,6 +765,14 @@ Resources:
       TaskDefinition: !Ref DriversTaskDefinition
       DesiredCount: !Ref DesiredCapacity
       LaunchType: FARGATE
+      EnableExecuteCommand: true
+      EnableECSManagedTags: true
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -642,6 +802,14 @@ Resources:
       TaskDefinition: !Ref VehiclesTaskDefinition
       DesiredCount: !Ref DesiredCapacity
       LaunchType: FARGATE
+      EnableExecuteCommand: true
+      EnableECSManagedTags: true
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -671,6 +839,14 @@ Resources:
       TaskDefinition: !Ref TripsTaskDefinition
       DesiredCount: !Ref DesiredCapacity
       LaunchType: FARGATE
+      EnableExecuteCommand: true
+      EnableECSManagedTags: true
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -700,6 +876,14 @@ Resources:
       TaskDefinition: !Ref AlertConfigsTaskDefinition
       DesiredCount: !Ref DesiredCapacity
       LaunchType: FARGATE
+      EnableExecuteCommand: true
+      EnableECSManagedTags: true
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -729,6 +913,14 @@ Resources:
       TaskDefinition: !Ref CarrierProfileTaskDefinition
       DesiredCount: !Ref DesiredCapacity
       LaunchType: FARGATE
+      EnableExecuteCommand: true
+      EnableECSManagedTags: true
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -758,6 +950,14 @@ Resources:
       TaskDefinition: !Ref FacilitiesTaskDefinition
       DesiredCount: !Ref DesiredCapacity
       LaunchType: FARGATE
+      EnableExecuteCommand: true
+      EnableECSManagedTags: true
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -777,3 +977,358 @@ Resources:
           ContainerPort: !FindInMap [ServicePorts, facilities, port]
           TargetGroupArn: !ImportValue 
             Fn::Sub: "${EnvironmentTag}-facilitiesTargetGroupArn"
+
+  UserMgtService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "${EnvironmentTag}-usermgt-service"
+      Cluster: !ImportValue
+        Fn::Sub: "${EnvironmentTag}-ClusterArn"
+      TaskDefinition: !Ref UserMgtTaskDefinition
+      DesiredCount: !Ref DesiredCapacity
+      LaunchType: FARGATE
+      EnableExecuteCommand: true
+      EnableECSManagedTags: true
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Ref Application
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+            - !ImportValue
+                Fn::Sub: "${EnvironmentTag}-FargateSecurityGroupId"
+          Subnets: !Ref BackendPrivateSubnetIds
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: usermgt-container
+          ContainerPort: !FindInMap [ServicePorts, usermgt, port]
+          TargetGroupArn: !ImportValue
+            Fn::Sub: "${EnvironmentTag}-userMgtTargetGroupArn"
+
+  # Auto Scaling Configuration for Frontend
+  FrontendScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: FrontendService
+    Properties:
+      MaxCapacity: !Ref MaxCapacity
+      MinCapacity: !Ref MinCapacity
+      ResourceId: !Sub "service/${ClusterName}/${EnvironmentTag}-frontend-service"
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  FrontendCPUScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-frontend-cpu-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref FrontendScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetCpuUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  FrontendMemoryScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-frontend-memory-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref FrontendScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetMemoryUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  # Auto Scaling Configuration for Drivers
+  DriversScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: DriversService
+    Properties:
+      MaxCapacity: !Ref MaxCapacity
+      MinCapacity: !Ref MinCapacity
+      ResourceId: !Sub "service/${ClusterName}/${EnvironmentTag}-drivers-service"
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  DriversCPUScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-drivers-cpu-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref DriversScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetCpuUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  DriversMemoryScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-drivers-memory-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref DriversScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetMemoryUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  # Auto Scaling Configuration for Vehicles
+  VehiclesScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: VehiclesService
+    Properties:
+      MaxCapacity: !Ref MaxCapacity
+      MinCapacity: !Ref MinCapacity
+      ResourceId: !Sub "service/${ClusterName}/${EnvironmentTag}-vehicles-service"
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  VehiclesCPUScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-vehicles-cpu-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref VehiclesScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetCpuUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  VehiclesMemoryScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-vehicles-memory-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref VehiclesScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetMemoryUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  # Auto Scaling Configuration for Trips
+  TripsScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: TripsService
+    Properties:
+      MaxCapacity: !Ref MaxCapacity
+      MinCapacity: !Ref MinCapacity
+      ResourceId: !Sub "service/${ClusterName}/${EnvironmentTag}-trips-service"
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  TripsCPUScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-trips-cpu-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref TripsScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetCpuUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  TripsMemoryScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-trips-memory-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref TripsScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetMemoryUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  # Auto Scaling Configuration for AlertConfigs
+  AlertConfigsScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: AlertConfigsService
+    Properties:
+      MaxCapacity: !Ref MaxCapacity
+      MinCapacity: !Ref MinCapacity
+      ResourceId: !Sub "service/${ClusterName}/${EnvironmentTag}-alertconfigs-service"
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  AlertConfigsCPUScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-alertconfigs-cpu-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref AlertConfigsScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetCpuUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  AlertConfigsMemoryScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-alertconfigs-memory-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref AlertConfigsScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetMemoryUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  # Auto Scaling Configuration for CarrierProfile
+  CarrierProfileScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: CarrierProfileService
+    Properties:
+      MaxCapacity: !Ref MaxCapacity
+      MinCapacity: !Ref MinCapacity
+      ResourceId: !Sub "service/${ClusterName}/${EnvironmentTag}-carrierprofile-service"
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  CarrierProfileCPUScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-carrierprofile-cpu-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref CarrierProfileScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetCpuUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  CarrierProfileMemoryScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-carrierprofile-memory-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref CarrierProfileScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetMemoryUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  # Auto Scaling Configuration for Facilities
+  FacilitiesScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: FacilitiesService
+    Properties:
+      MaxCapacity: !Ref MaxCapacity
+      MinCapacity: !Ref MinCapacity
+      ResourceId: !Sub "service/${ClusterName}/${EnvironmentTag}-facilities-service"
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  FacilitiesCPUScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-facilities-cpu-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref FacilitiesScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetCpuUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  FacilitiesMemoryScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-facilities-memory-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref FacilitiesScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetMemoryUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  # Auto Scaling Configuration for UserMgt
+  UserMgtScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: UserMgtService
+    Properties:
+      MaxCapacity: !Ref MaxCapacity
+      MinCapacity: !Ref MinCapacity
+      ResourceId: !Sub "service/${ClusterName}/${EnvironmentTag}-usermgt-service"
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  UserMgtCPUScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-usermgt-cpu-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref UserMgtScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetCpuUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+  UserMgtMemoryScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${EnvironmentTag}-usermgt-memory-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref UserMgtScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref TargetMemoryUtilization
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+
+Outputs:
+  StackVersion:
+    Description: Stack with all AWS best practices implemented
+    Value: "v1.0"
+  TotalServices:
+    Description: Number of ECS services deployed
+    Value: "8"
+  AutoScalingEnabled:
+    Description: Auto-scaling configured for all services
+    Value: "true"
+  DeploymentCircuitBreakerEnabled:
+    Description: Deployment circuit breaker enabled for safe rollouts
+    Value: "true"
