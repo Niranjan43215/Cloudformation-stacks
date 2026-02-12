@@ -5,7 +5,7 @@ Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
     Description: Manually created VPC ID
-    Default: 
+    Default: vpc-0d6db502f4ce2b847
   FrontendPrivateSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
     Description: Manually created Frontend Private Subnet IDs 
@@ -67,7 +67,7 @@ Parameters:
     Description: ALB scheme 
   IdleTimeoutSeconds:
     Type: Number
-    Default: 60
+    Default: 300
     Description: ALB idle timeout in seconds
   
   # Health Check Configuration
@@ -92,22 +92,37 @@ Parameters:
     Default: 3
     Description: Unhealthy threshold count
 
-Mappings:
-  ServicePorts:
-    drivers:
-      port: 8001
-    vehicles:
-      port: 8002
-    alertconfigs:
-      port: 8003
-    trips:
-      port: 8004
-    facilities:
-      port: 8005
-    carrierprofile:
-      port: 8006
+  # Existing S3 Bucket
+  ExistingS3Bucket:
+    Type: String
+    Default: "tms-qa-app-s3"
+    Description: Existing S3 bucket name for ALB access logs
 
 Resources:
+  # S3 Bucket Policy for ALB Access Logs (using existing bucket)
+  ALBAccessLogsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
+    Properties:
+      Bucket: !Ref ExistingS3Bucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: "arn:aws:iam::127311923021:root"
+            Action: s3:PutObject
+            Resource: !Sub "arn:aws:s3:::${ExistingS3Bucket}/alb-access-logs/*"
+          - Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub "arn:aws:s3:::${ExistingS3Bucket}/alb-access-logs/*"
+          - Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !Sub "arn:aws:s3:::${ExistingS3Bucket}"
+
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
@@ -278,7 +293,7 @@ Resources:
           Description: HTTPS from Frontend ALB
         - IpProtocol: tcp
           FromPort: 8001
-          ToPort: 8006
+          ToPort: 8007
           SourceSecurityGroupId: !Ref BackendALBSecurityGroup
           Description: Backend services from Backend ALB
       Tags:
@@ -293,6 +308,9 @@ Resources:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: !Sub "${EnvironmentTag}/frontend-app"
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -305,6 +323,9 @@ Resources:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: !Sub "${EnvironmentTag}/drivers-service"
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -317,6 +338,9 @@ Resources:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: !Sub "${EnvironmentTag}/vehicles-service"
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -329,6 +353,9 @@ Resources:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: !Sub "${EnvironmentTag}/trips-service"
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -341,6 +368,9 @@ Resources:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: !Sub "${EnvironmentTag}/alertconfigs-service"
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -353,6 +383,9 @@ Resources:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: !Sub "${EnvironmentTag}/carrierprofile-service"
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -365,6 +398,24 @@ Resources:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: !Sub "${EnvironmentTag}/facilities-service"
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Sub "${Application}-${Environment}"
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
+
+  userMgtECR:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${EnvironmentTag}/user-mgt-service"
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -380,6 +431,15 @@ Resources:
       Scheme: !Ref ALBScheme
       Type: application
       Subnets: !Ref FrontendPrivateSubnetIds
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: !Ref IdleTimeoutSeconds
+        - Key: access_logs.s3.enabled
+          Value: "true"
+        - Key: access_logs.s3.bucket
+          Value: !Ref ExistingS3Bucket
+        - Key: access_logs.s3.prefix
+          Value: "alb-access-logs/frontend-alb"
       SecurityGroups:
         - !Ref FrontendALBSecurityGroup
       Tags:
@@ -397,6 +457,15 @@ Resources:
       Scheme: !Ref ALBScheme
       Type: application
       Subnets: !Ref BackendPrivateSubnetIds
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: !Ref IdleTimeoutSeconds
+        - Key: access_logs.s3.enabled
+          Value: "true"
+        - Key: access_logs.s3.bucket
+          Value: !Ref ExistingS3Bucket
+        - Key: access_logs.s3.prefix
+          Value: "alb-access-logs/backend-alb"
       SecurityGroups:
         - !Ref BackendALBSecurityGroup
       Tags:
@@ -553,6 +622,27 @@ Resources:
           Value: !Sub "${Application}-${Environment}"
         - Key: "Application Owner"
           Value: !Ref ApplicationOwner
+
+  userMgtTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${EnvironmentTag}-user-mgt-tg"
+      Port: 8007
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: !Sub "${Application}-${Environment}"
+        - Key: "Application Owner"
+          Value: !Ref ApplicationOwner
           
   FrontendHTTPListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -685,6 +775,19 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref facilitiesTargetGroup
 
+  userMgtHTTPSRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref BackendHTTPSListener
+      Priority: 710 
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /users/*
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref userMgtTargetGroup
+
 Outputs:
   ClusterArn:
     Value: !GetAtt ECSCluster.Arn
@@ -738,6 +841,12 @@ Outputs:
       Name: !Sub "${EnvironmentTag}-FrontendALBDNSName"
     Description: Frontend ALB DNS name for domain configuration
 
+  ALBAccessLogsBucket:
+    Value: !Ref ExistingS3Bucket
+    Export:
+      Name: !Sub "${EnvironmentTag}-ALBAccessLogsBucket"
+    Description: S3 bucket for ALB access logs
+
   FrontendTargetGroupArn:
     Value: !Ref FrontendTargetGroup
     Export:
@@ -773,6 +882,11 @@ Outputs:
     Export:
       Name: !Sub "${EnvironmentTag}-facilitiesTargetGroupArn"
 
+  userMgtTargetGroupArn:
+    Value: !Ref userMgtTargetGroup
+    Export:
+      Name: !Sub "${EnvironmentTag}-userMgtTargetGroupArn"
+
   FrontendECRUri:
     Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FrontendECR}"
     Export:
@@ -807,3 +921,8 @@ Outputs:
     Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${facilitiesECR}"
     Export:
       Name: !Sub "${EnvironmentTag}-facilitiesECRUri"
+
+  userMgtECRUri:
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${userMgtECR}"
+    Export:
+      Name: !Sub "${EnvironmentTag}-userMgtECRUri"
